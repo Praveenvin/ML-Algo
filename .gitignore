@@ -19,6 +19,14 @@ data/*.csv
 # Generated model files (binary artifacts, regenerate via scripts/run_all.py)
 models/*.joblib
 
+# Per-session results from the interactive app (ML Studio), as opposed to
+# the fixed CLI outputs from scripts/run_all.py
+results/metrics/experiment_*.csv
+results/metrics/experiment_index.csv
+
+# Streamlit
+.streamlit/secrets.toml
+
 # Keep directory structure
 !data/.gitkeep
 !models/.gitkeep

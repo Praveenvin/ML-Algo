@@ -7,6 +7,7 @@ import pytest
 from src.preprocessing import (
     build_classification_preprocessor,
     build_clustering_preprocessor,
+    infer_feature_types,
     validate_no_missing,
 )
 
@@ -42,3 +43,24 @@ def test_clustering_preprocessor_scales_features() -> None:
     scaler = build_clustering_preprocessor(["a", "b"])
     X_scaled = scaler.fit_transform(X)
     assert np.allclose(X_scaled.mean(axis=0), 0, atol=1e-10)
+
+
+def test_infer_feature_types_splits_numeric_and_categorical() -> None:
+    df = pd.DataFrame(
+        {
+            "age": [20, 30, 40],
+            "income": [1000.0, 2000.0, 3000.0],
+            "gender": ["M", "F", "M"],
+            "city": ["A", "B", "C"],
+        }
+    )
+    numeric, categorical = infer_feature_types(df, ["age", "income", "gender", "city"])
+    assert numeric == ["age", "income"]
+    assert categorical == ["gender", "city"]
+
+
+def test_infer_feature_types_preserves_order_and_subset() -> None:
+    df = pd.DataFrame({"a": [1, 2], "b": ["x", "y"], "c": [1.5, 2.5]})
+    numeric, categorical = infer_feature_types(df, ["b", "c", "a"])
+    assert numeric == ["c", "a"]
+    assert categorical == ["b"]

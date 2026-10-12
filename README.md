@@ -5,6 +5,13 @@ algorithms, with an optional **Regression** module, built on three real tabular
 datasets. Every number in this README was produced by running the code in this
 repository — nothing here is hand-typed or simulated.
 
+The project ships two ways to run it:
+- A **command-line pipeline** (`scripts/run_all.py` and friends) that reproduces
+  the fixed, documented results in §11 below.
+- **ML Studio**, an interactive Streamlit app (`app.py`) that lets you upload
+  your own CSVs — or use the same three sample datasets — pick features/target
+  and algorithms, and run the exact same scikit-learn pipelines live. See §15.
+
 ## 1. Project overview
 
 This project trains and evaluates multiple scikit-learn algorithms per task on
@@ -83,6 +90,20 @@ alongside accuracy.
 
 ```text
 ml-algorithms-comparison/
+├── app.py                      # ML Studio entry point (streamlit run app.py)
+├── ui/                         # Streamlit frontend — presentation only, no ML logic
+│   ├── styles.py                 # theme CSS (white/lavender/purple)
+│   ├── components.py             # reusable Plotly charts & widgets
+│   ├── config_form.py            # shared dataset/feature/target/model selectors
+│   ├── data_state.py             # session-state dataset registry
+│   └── pages/
+│       ├── dashboard.py
+│       ├── dataset_explorer.py
+│       ├── classification.py
+│       ├── clustering.py
+│       ├── boosting.py
+│       ├── regression.py
+│       └── model_comparison.py
 ├── data/                       # raw CSVs (gitignored; see data/README.md)
 ├── notebooks/                  # runnable notebooks mirroring src/ + scripts/
 ├── src/                        # shared library code (no duplicate logic)
@@ -90,19 +111,20 @@ ml-algorithms-comparison/
 │   ├── data_loader.py            # load + schema validation
 │   ├── preprocessing.py          # leakage-safe pipelines (fit on train only)
 │   ├── exploratory_analysis.py   # dataset overview plot
-│   ├── classification.py         # Module A
-│   ├── clustering.py             # Module B
-│   ├── boosting.py               # Module C
-│   ├── regression.py             # Module D (optional)
+│   ├── classification.py         # Module A + generic run_classification_experiment()
+│   ├── clustering.py             # Module B + generic run_clustering_experiment()
+│   ├── boosting.py               # Module C + generic run_boosting_experiment()
+│   ├── regression.py             # Module D (optional) + generic run_regression_experiment()
 │   ├── evaluation.py             # shared metric functions, incl. edge cases
-│   └── visualization.py          # shared plotting functions
+│   ├── experiment_store.py       # persists ML Studio experiment results uniquely
+│   └── visualization.py          # shared plotting functions (CLI/notebooks)
 ├── results/
-│   ├── metrics/                  # *.csv — one row per model
+│   ├── metrics/                  # *.csv — one row per model (+ app-generated experiment_*.csv)
 │   ├── predictions/               # *.csv — y_true + per-model y_pred
 │   ├── cluster_assignments/       # customer_clusters.csv
 │   └── plots/                     # *.png
 ├── models/                     # best_*.joblib (gitignored)
-├── tests/                      # pytest suite (20 tests, see §10)
+├── tests/                      # pytest suite (43 tests, see §10)
 ├── scripts/                    # CLI entry points
 └── requirements.txt
 ```
@@ -348,3 +370,49 @@ Or, with the GitHub CLI authenticated:
 ```bash
 gh repo create ml-algorithms-comparison --public --source=. --remote=origin --push
 ```
+
+## 15. ML Studio — interactive frontend
+
+ML Studio is a Streamlit application that puts the same `src/` pipelines used
+by the CLI scripts behind an interactive UI — upload your own CSV or pick one
+of the three sample datasets, choose features/target/algorithms, and get
+real metrics and Plotly charts back. It does not duplicate the ML logic: the
+`src/classification.py`, `src/boosting.py`, `src/clustering.py`, and
+`src/regression.py` modules each expose a generic `run_*_experiment()`
+function that both the CLI and the app call.
+
+### Launching it (Windows PowerShell)
+
+```powershell
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+streamlit run app.py
+```
+
+This opens the app at `http://localhost:8501`. On macOS/Linux, activate with
+`source .venv/bin/activate` instead.
+
+### Pages
+
+| Page | What it does |
+|---|---|
+| **Dashboard** | Dataset/experiment summary cards, a dataset overview chart, and the latest model comparison chart. |
+| **Dataset Explorer** | Upload a CSV (never written to `data/`) or pick a sample dataset; inspect dtypes, missing values, duplicates, summary statistics, and per-column distributions. |
+| **Classification** | Choose target + features, pick from Logistic Regression / Decision Tree / Random Forest / SVM / KNN, and get accuracy/precision/recall/F1/ROC-AUC, confusion matrices, a classification report, and an ROC curve. |
+| **Clustering** | No target required — pick numeric features and run K-Means / Agglomerative / DBSCAN with configurable K, eps, and min_samples. Shows an interactive scatter plot (PCA-projected when more than 2 features are selected), cluster size distribution, silhouette score, and per-cluster profiles. |
+| **Boosting** | AdaBoost / Gradient Boosting / HistGradientBoosting on the same target/split conventions as Classification, plus feature importance and a direct comparison table against the Classification page's results (when run on the same dataset/target). |
+| **Regression** | Pick any numeric target, run Linear Regression / Decision Tree / Random Forest / Gradient Boosting Regressor, and get MAE/RMSE/R², actual-vs-predicted, and residual plots. |
+| **Model Comparison** | Every experiment run through the app is saved (see `src/experiment_store.py`) and listed here, filterable by task and dataset, rankable by any metric, with a downloadable CSV. Classification/boosting, regression, and clustering metrics are kept in separate rankings since they are not comparable. |
+
+### Notes
+
+- Model selection inside the app follows the same rule as the CLI: the "best
+  model" badge is chosen by cross-validated score on the training set, never
+  by peeking at the test set.
+- Every `Run Experiment` click writes a uniquely named metrics CSV plus an
+  index row to `results/metrics/experiment_index.csv`, so concurrent
+  experiments never overwrite each other or the CLI's fixed output files
+  (`classification_metrics.csv`, etc.). These app-generated files are
+  gitignored by default — see `.gitignore`.
+- Uploaded datasets live only in the browser session's memory; they are never
+  written back into `data/`.

@@ -1,16 +1,28 @@
 """Module B: Clustering on Mall_Customers.csv."""
 
+import warnings
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from sklearn.cluster import DBSCAN, AgglomerativeClustering, KMeans
+from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 
 from src import config
 from src.data_loader import load_mall_customers
 from src.evaluation import evaluate_clustering
 from src.preprocessing import build_clustering_preprocessor, validate_no_missing
+
+# Benign, Windows-specific sklearn/MKL threading notice (not a correctness
+# issue): fires on every KMeans fit, so it would otherwise repeat once per K
+# in the elbow-method loop below. Silenced by message so other UserWarnings
+# (e.g. genuine convergence warnings) still surface normally.
+warnings.filterwarnings(
+    "ignore",
+    message="KMeans is known to have a memory leak on Windows with MKL.*",
+    category=UserWarning,
+)
 
 K_RANGE = range(2, 11)
 DEFAULT_DBSCAN_EPS = 0.5
@@ -126,6 +138,123 @@ def run_clustering() -> dict[str, Any]:
         "dbscan_eps": dbscan_eps,
         "dbscan_min_samples": dbscan_min_samples,
         "segment_profiles": segment_profiles,
+    }
+
+
+ALGORITHM_FACTORY_NAMES = ("KMeans", "Agglomerative", "DBSCAN")
+
+
+def run_clustering_experiment(
+    df: pd.DataFrame,
+    feature_columns: list[str],
+    algorithms: list[str] | None = None,
+    kmeans_k: int = 5,
+    agglomerative_k: int = 5,
+    dbscan_eps: float | None = None,
+    dbscan_min_samples: int = 5,
+    random_state: int = 42,
+) -> dict[str, Any]:
+    """Run clustering on an arbitrary dataset/feature selection, as used by
+    the interactive app. Does not write to disk.
+
+    Args:
+        df: Source DataFrame.
+        feature_columns: Numeric columns to cluster on (categorical columns
+            are rejected, since Euclidean-distance clustering requires a
+            numeric feature space).
+        algorithms: Subset of "KMeans", "Agglomerative", "DBSCAN" to run;
+            all three if None.
+        kmeans_k: Number of clusters for K-Means.
+        agglomerative_k: Number of clusters for Agglomerative Clustering.
+        dbscan_eps: DBSCAN neighborhood radius; estimated via the k-distance
+            heuristic if None.
+        dbscan_min_samples: DBSCAN minimum samples per neighborhood.
+        random_state: Seed for K-Means and PCA.
+
+    Returns:
+        Dictionary with metrics_df, assignments_df (original df + one
+        `<Algorithm>_cluster` column per algorithm run), scaled feature
+        matrix, resolved dbscan_eps, and PCA 2D components (pca_df) when
+        more than 2 feature columns were selected, for visualization.
+
+    Raises:
+        ValueError: If fewer than 2 numeric feature columns are selected,
+            or an unknown algorithm name is given.
+    """
+    if algorithms is None:
+        algorithms = list(ALGORITHM_FACTORY_NAMES)
+    unknown = [a for a in algorithms if a not in ALGORITHM_FACTORY_NAMES]
+    if unknown:
+        raise ValueError(f"Unknown algorithm(s): {unknown}. Available: {list(ALGORITHM_FACTORY_NAMES)}")
+    if not algorithms:
+        raise ValueError("Select at least one clustering algorithm before running an experiment.")
+
+    numeric_features = [c for c in feature_columns if pd.api.types.is_numeric_dtype(df[c])]
+    if len(numeric_features) < 2:
+        raise ValueError(
+            "Clustering requires at least 2 numeric feature columns; "
+            f"got {len(numeric_features)} numeric column(s) among the selection."
+        )
+
+    validate_no_missing(df, numeric_features)
+    X = df[numeric_features].values
+    scaler = build_clustering_preprocessor(numeric_features)
+    X_scaled = scaler.fit_transform(X)
+
+    assignments_df = df.copy()
+    results_rows = []
+    resolved_dbscan_eps = dbscan_eps
+
+    if "KMeans" in algorithms:
+        kmeans = KMeans(n_clusters=kmeans_k, random_state=random_state, n_init=10)
+        labels = kmeans.fit_predict(X_scaled)
+        assignments_df["KMeans_cluster"] = labels
+        metrics = evaluate_clustering(X_scaled, labels)
+        metrics["model"] = "KMeans"
+        metrics["chosen_k"] = kmeans_k
+        results_rows.append(metrics)
+
+    if "Agglomerative" in algorithms:
+        agglomerative = AgglomerativeClustering(n_clusters=agglomerative_k)
+        labels = agglomerative.fit_predict(X_scaled)
+        assignments_df["Agglomerative_cluster"] = labels
+        metrics = evaluate_clustering(X_scaled, labels)
+        metrics["model"] = "Agglomerative"
+        metrics["chosen_k"] = agglomerative_k
+        results_rows.append(metrics)
+
+    if "DBSCAN" in algorithms:
+        if resolved_dbscan_eps is None:
+            resolved_dbscan_eps = estimate_dbscan_eps(X_scaled, dbscan_min_samples)
+        dbscan = DBSCAN(eps=resolved_dbscan_eps, min_samples=dbscan_min_samples)
+        labels = dbscan.fit_predict(X_scaled)
+        assignments_df["DBSCAN_cluster"] = labels
+        metrics = evaluate_clustering(X_scaled, labels)
+        metrics["model"] = "DBSCAN"
+        metrics["chosen_k"] = None
+        results_rows.append(metrics)
+
+    metrics_df = pd.DataFrame(results_rows)[
+        ["model", "n_clusters", "n_noise_points", "silhouette_score", "chosen_k"]
+    ]
+
+    pca_df = None
+    pca_explained_variance_ratio = None
+    if len(numeric_features) > 2:
+        pca = PCA(n_components=2, random_state=random_state)
+        components = pca.fit_transform(X_scaled)
+        pca_df = pd.DataFrame({"PC1": components[:, 0], "PC2": components[:, 1]})
+        pca_explained_variance_ratio = tuple(float(v) for v in pca.explained_variance_ratio_)
+
+    return {
+        "metrics_df": metrics_df,
+        "assignments_df": assignments_df,
+        "X_scaled": X_scaled,
+        "numeric_features": numeric_features,
+        "dbscan_eps": resolved_dbscan_eps,
+        "dbscan_min_samples": dbscan_min_samples,
+        "pca_df": pca_df,
+        "pca_explained_variance_ratio": pca_explained_variance_ratio,
     }
 
 

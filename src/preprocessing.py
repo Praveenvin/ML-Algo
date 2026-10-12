@@ -40,6 +40,27 @@ def build_clustering_preprocessor(features: list[str]) -> Pipeline:
     return Pipeline(steps=[("scaler", StandardScaler())])
 
 
+def infer_feature_types(
+    df: pd.DataFrame, feature_columns: list[str]
+) -> tuple[list[str], list[str]]:
+    """Split feature columns into numeric and categorical based on dtype.
+
+    Used by the interactive app, where feature columns are chosen by the
+    user at runtime rather than hardcoded per dataset.
+
+    Args:
+        df: DataFrame containing the feature columns.
+        feature_columns: Columns to classify.
+
+    Returns:
+        A (numeric_features, categorical_features) tuple, each preserving
+        the original column order.
+    """
+    numeric_features = [c for c in feature_columns if pd.api.types.is_numeric_dtype(df[c])]
+    categorical_features = [c for c in feature_columns if c not in numeric_features]
+    return numeric_features, categorical_features
+
+
 def validate_no_missing(df: pd.DataFrame, columns: list[str]) -> None:
     """Raise a ValueError if any of the given columns contain missing values.
 
