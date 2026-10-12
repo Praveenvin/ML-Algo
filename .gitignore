@@ -1,0 +1,30 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Datasets (keep out of Git; see data/README.md)
+data/*.csv
+
+# Generated model files (binary artifacts, regenerate via scripts/run_all.py)
+models/*.joblib
+
+# Keep directory structure
+!data/.gitkeep
+!models/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

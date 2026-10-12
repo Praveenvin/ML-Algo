@@ -1,0 +1,4 @@
+model,n_clusters,n_noise_points,silhouette_score,chosen_k
+KMeans,5,0,0.5546571631111091,5.0
+Agglomerative,5,0,0.5538089226688662,5.0
+DBSCAN,2,11,0.39628352353472795,
