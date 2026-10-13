@@ -14,7 +14,7 @@ __pycache__/
 .ipynb_checkpoints/
 
 # Datasets (keep out of Git; see data/README.md)
-data/*.csv
+#data/*.csv
 
 # Generated model files (binary artifacts, regenerate via scripts/run_all.py)
 models/*.joblib

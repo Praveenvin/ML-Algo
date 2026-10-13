@@ -43,3 +43,36 @@ def test_load_insurance_schema_and_dedup() -> None:
     df = load_insurance(config.INSURANCE_PATH)
     assert {"age", "sex", "bmi", "children", "smoker", "charges"}.issubset(df.columns)
     assert df.duplicated().sum() == 0
+
+
+def test_load_csv_missing_file_helpful_error(tmp_path: Path) -> None:
+    missing_path = tmp_path / "non_existent_dataset.csv"
+    with pytest.raises(FileNotFoundError) as exc_info:
+        load_csv(missing_path)
+    error_msg = str(exc_info.value)
+    assert str(missing_path) in error_msg
+    assert "Available dataset files" in error_msg
+
+
+def test_load_datasets_default_paths() -> None:
+    df_ads = load_social_network_ads()
+    assert len(df_ads) > 0
+    df_mall = load_mall_customers()
+    assert len(df_mall) > 0
+    df_ins = load_insurance()
+    assert len(df_ins) > 0
+
+
+def test_load_datasets_relative_paths() -> None:
+    df_rel1 = load_social_network_ads("data/Social_Network_Ads.csv")
+    assert len(df_rel1) > 0
+    df_rel2 = load_social_network_ads("Social_Network_Ads.csv")
+    assert len(df_rel2) > 0
+
+
+def test_load_datasets_from_different_working_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    df_ads = load_social_network_ads("data/Social_Network_Ads.csv")
+    assert len(df_ads) > 0
+    df_default = load_social_network_ads()
+    assert len(df_default) > 0

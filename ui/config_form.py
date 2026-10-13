@@ -27,6 +27,9 @@ def render_dataset_picker(key_prefix: str) -> tuple[str | None, pd.DataFrame | N
         df = data_state.get_dataset(name)
     except KeyError:
         return name, None
+    except FileNotFoundError as exc:
+        st.error(str(exc))
+        return name, None
     return name, df
 
 
